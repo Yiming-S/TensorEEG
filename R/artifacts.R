@@ -35,6 +35,20 @@
 #' @importFrom signal butter filtfilt
 #' @export
 sim_artifacts <- function(n_time, n_channels, fs, coords_sens) {
+  if(!is.numeric(n_time) || length(n_time) != 1L || !is.finite(n_time) || n_time < 1) {
+    stop("n_time must be a positive integer.")
+  }
+  if(!is.numeric(n_channels) || length(n_channels) != 1L || !is.finite(n_channels) || n_channels < 1) {
+    stop("n_channels must be a positive integer.")
+  }
+  if(!is.numeric(fs) || length(fs) != 1L || !is.finite(fs) || fs <= 0) {
+    stop("fs must be a single positive finite number.")
+  }
+  n_time <- as.integer(n_time)
+  n_channels <- as.integer(n_channels)
+  if(!is.matrix(coords_sens) || nrow(coords_sens) != n_channels || ncol(coords_sens) < 3) {
+    stop("coords_sens must be a matrix with n_channels rows and at least 3 columns.")
+  }
   
   N_fast <- matrix(0, n_time, n_channels)
   
@@ -43,14 +57,15 @@ sim_artifacts <- function(n_time, n_channels, fs, coords_sens) {
   dists <- sqrt(rowSums((coords_sens - matrix(fpz, nrow=n_channels, ncol=3, byrow=T))^2))
   proj_eog <- exp(-dists^2 / 0.1)
   
-  n_blink <- round(0.3 * fs) 
+  n_blink <- max(1L, as.integer(round(0.3 * fs)))
   t_blink <- seq(-pi, pi, length.out=n_blink)
   blink_shape <- (1 + cos(t_blink))/2 
   
   n_events_eog <- rpois(1, (n_time/fs) * (15/60)) 
-  if(n_events_eog > 0) {
-    possible_starts <- 1:(n_time - n_blink)
-    if(length(possible_starts) > 0) {
+  if(n_events_eog > 0 && n_time >= n_blink) {
+    n_start <- n_time - n_blink + 1L
+    if(n_start > 0) {
+      possible_starts <- seq_len(n_start)
       onsets <- sample(possible_starts, min(n_events_eog, length(possible_starts)))
       ts_eog <- numeric(n_time)
       for(t_start in onsets) {
@@ -67,17 +82,27 @@ sim_artifacts <- function(n_time, n_channels, fs, coords_sens) {
   if(n_bursts > 0) {
     bf_emg <- signal::butter(4, 20/(fs/2), type="high")
     
-    for(i in 1:n_bursts) {
+    for(i in seq_len(n_bursts)) {
+      dur_samps <- max(1L, as.integer(round(0.1 * fs)))
+      if(n_time < dur_samps) next
+
       center_ch <- sample(1:n_channels, 1)
-      cluster <- order(dist_SS[center_ch,])[1:3]
-      dur_samps <- round(0.1 * fs)
-      start_t <- sample(1:(n_time - dur_samps), 1)
-      
-      buffer_len <- fs 
+      cluster_size <- min(3L, n_channels)
+      cluster <- order(dist_SS[center_ch,])[seq_len(cluster_size)]
+
+      n_start <- n_time - dur_samps + 1L
+      start_t <- sample(seq_len(n_start), 1)
+
+      buffer_len <- max(as.integer(round(fs)), dur_samps + 8L)
       noise_buffer <- matrix(rnorm(buffer_len * length(cluster)), buffer_len, length(cluster))
       noise_hp_long <- apply(noise_buffer, 2, function(x) signal::filtfilt(bf_emg, x))
-      crop_start <- floor((buffer_len - dur_samps)/2)
-      noise_burst <- noise_hp_long[crop_start:(crop_start+dur_samps-1), ]
+      noise_hp_long <- as.matrix(noise_hp_long)
+      if(ncol(noise_hp_long) != length(cluster)) {
+        noise_hp_long <- matrix(noise_hp_long, ncol = length(cluster))
+      }
+      crop_start <- floor((buffer_len - dur_samps) / 2) + 1L
+      idx_end <- crop_start + dur_samps - 1L
+      noise_burst <- noise_hp_long[crop_start:idx_end, , drop = FALSE]
       
       N_fast[start_t:(start_t+dur_samps-1), cluster] <- N_fast[start_t:(start_t+dur_samps-1), cluster] + noise_burst * 20
     }

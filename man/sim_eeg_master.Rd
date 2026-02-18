@@ -14,7 +14,9 @@ sim_eeg_master(
   snr_artifact_db = 0,
   drift_power_ratio = 0.5,
   target_freqs = NULL,
-  class_labels = NULL
+  class_labels = NULL,
+  seed = NULL,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -40,6 +42,10 @@ If NULL, frequencies are randomly drawn from 8-20 Hz.}
 
 \item{class_labels}{Integer vector (optional). A vector of length \code{n_trials} containing 0s and 1s.
 If NULL, defaults to alternating 0/1.}
+
+\item{seed}{Integer (optional). If provided, sets RNG seed for reproducible simulation.}
+
+\item{verbose}{Logical. If TRUE, prints simulation progress messages.}
 }
 \value{
 A list containing the simulation results:

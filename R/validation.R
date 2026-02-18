@@ -125,7 +125,7 @@ validate_sim_eeg <- function(sim_res,
   plot(freq1, psd1, type="l", xlim=c(0, fmax_plot),
        main="PSD (Class 1)", xlab="Hz", ylab="dB")
   if(!is.null(target_freqs)) {
-    abline(v = target_freqs, col=rgb(0,0,0,0.2), lty=3)
+    abline(v = target_freqs, col=grDevices::rgb(0,0,0,0.2), lty=3)
   }
   abline(v = 20, col="red", lty=2) # Task Freq
   legend("topright", c("Task (20Hz)", "Bg Freqs"), col=c("red", "black"), lty=c(2,3), bty="n", cex=0.8)
@@ -151,8 +151,8 @@ validate_sim_eeg <- function(sim_res,
          main="SNR Audit", ylab="dB", xlab="Trial")
     abline(h=snr_target_db, col="green", lty=2)
   } else {
-    plot.new()
-    text(0.5, 0.5, "No audit SNR data found")
+    graphics::plot.new()
+    graphics::text(0.5, 0.5, "No audit SNR data found")
   }
   
   par(mfrow=c(1,1))

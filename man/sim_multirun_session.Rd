@@ -4,7 +4,13 @@
 \alias{sim_multirun_session}
 \title{Simulate a Full Session with Multiple Runs (Cross-Run Drift)}
 \usage{
-sim_multirun_session(n_runs = 3, trials_per_run = 20, gap_trials = 15, ...)
+sim_multirun_session(
+  n_runs = 3,
+  trials_per_run = 20,
+  gap_trials = 15,
+  verbose = TRUE,
+  ...
+)
 }
 \arguments{
 \item{n_runs}{Integer. Number of experimental runs (blocks) to simulate (default: 3).}
@@ -13,6 +19,8 @@ sim_multirun_session(n_runs = 3, trials_per_run = 20, gap_trials = 15, ...)
 
 \item{gap_trials}{Integer. Number of "virtual" trials to simulate but discard between runs (default: 15).
 Higher values create larger distributional shifts between runs.}
+
+\item{verbose}{Logical. If TRUE, prints run extraction progress.}
 
 \item{...}{Additional arguments passed to \code{\link{sim_eeg_master}} (e.g., \code{n_time}, \code{n_sources}).}
 }

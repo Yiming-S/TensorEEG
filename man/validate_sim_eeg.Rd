@@ -4,14 +4,41 @@
 \alias{validate_sim_eeg}
 \title{Validate Simulation Output via Visual Inspection}
 \usage{
-validate_sim_eeg(sim_res)
+validate_sim_eeg(
+  sim_res,
+  class0_trial = NULL,
+  class1_trial = NULL,
+  channel = 1,
+  fmax = 60,
+  snr_target_db = NULL,
+  save_path = NULL,
+  return_metrics = FALSE
+)
 }
 \arguments{
 \item{sim_res}{List. The simulation object returned by \code{\link{sim_eeg_master}}, containing
 \code{$data}, \code{$params}, \code{$labels}, and \code{$audit}.}
+
+\item{class0_trial}{Integer (optional). Trial index to use as Class 0 representative.
+If NULL, the first available class 0 trial is used.}
+
+\item{class1_trial}{Integer (optional). Trial index to use as Class 1 representative.
+If NULL, the first available class 1 trial is used.}
+
+\item{channel}{Integer. Channel index used for temporal and PSD inspection.}
+
+\item{fmax}{Numeric. Maximum frequency (Hz) for PSD plot.}
+
+\item{snr_target_db}{Numeric (optional). Target SNR line for audit plot.
+If NULL, median realized SNR is used.}
+
+\item{save_path}{Character (optional). If provided, saves the dashboard to PNG file.}
+
+\item{return_metrics}{Logical. If TRUE, returns a metrics list instead of only plotting.}
 }
 \value{
-NULL. The function is called for its side effect of generating plots.
+Invisible metrics list. If \code{return_metrics = TRUE}, the metrics list
+  is returned explicitly.
 }
 \description{
 Generates a diagnostic dashboard (2x2 grid) to visually verify the spectral, spatial,

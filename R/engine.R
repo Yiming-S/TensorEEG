@@ -34,6 +34,8 @@
 #'   If NULL, frequencies are randomly drawn from 8-20 Hz.
 #' @param class_labels Integer vector (optional). A vector of length \code{n_trials} containing 0s and 1s.
 #'   If NULL, defaults to alternating 0/1.
+#' @param seed Integer (optional). If provided, sets RNG seed for reproducible simulation.
+#' @param verbose Logical. If TRUE, prints simulation progress messages.
 #'
 #' @return A list containing the simulation results:
 #' \describe{
@@ -55,25 +57,60 @@ sim_eeg_master <- function(n_trials = 20,
                            snr_artifact_db = 0,
                            drift_power_ratio = 0.5, 
                            target_freqs = NULL,
-                           class_labels = NULL) { # New: Class Labels
+                           class_labels = NULL,
+                           seed = NULL,
+                           verbose = TRUE) {
+  if(!is.null(seed)) {
+    if(!is.numeric(seed) || length(seed) != 1L || !is.finite(seed)) {
+      stop("seed must be a single finite number.")
+    }
+    set.seed(as.integer(seed))
+  }
+  if(!is.numeric(n_trials) || length(n_trials) != 1L || !is.finite(n_trials) || n_trials < 1) {
+    stop("n_trials must be a positive integer.")
+  }
+  n_trials <- as.integer(n_trials)
+  
+  if(!is.numeric(target_freqs) && !is.null(target_freqs)) {
+    stop("target_freqs must be NULL or a numeric vector of length n_sources.")
+  }
+  if(is.null(target_freqs)) {
+    target_freqs <- stats::runif(n_sources, 8, 20)
+  } else {
+    if(length(target_freqs) != n_sources) {
+      stop("target_freqs must have length n_sources.")
+    }
+    target_freqs <- as.numeric(target_freqs)
+  }
+  
+  if(is.null(class_labels)) {
+    class_labels <- rep(c(0L, 1L), length.out = n_trials)
+  } else {
+    if(length(class_labels) != n_trials) {
+      stop("class_labels must have length n_trials.")
+    }
+    class_labels <- as.integer(class_labels)
+    if(any(is.na(class_labels)) || !all(class_labels %in% c(0L, 1L))) {
+      stop("class_labels must only contain 0 and 1.")
+    }
+  }
   
   geo <- generate_geometry_mixing(n_channels, n_sources)
   A_base <- geo$A_base
   coords <- geo$coords_sens
   rotations <- generate_drift_rotations(n_sources, n_trials)
-  
-  if(is.null(target_freqs)) target_freqs <- runif(n_sources, 8, 20)
   var_system <- setup_var2_system(n_sources, fs, target_freqs)
   
-  # Default class labels: alternate 0/1
-  if(is.null(class_labels)) class_labels <- rep(c(0,1), length.out=n_trials)
-  
   X_Tensor <- array(0, dim = c(n_time, n_channels, n_trials))
-  audit_list <- list()
+  audit_list <- vector("list", n_trials)
   
-  cat("Simulating Trials: ")
-  for(k in 1:n_trials) {
-    if(k %% 10 == 0) cat(k, "...")
+  if(verbose) {
+    message(sprintf("Simulating %d trials...", n_trials))
+  }
+  for(k in seq_len(n_trials)) {
+    if(verbose && (k %% 10L == 0L || k == n_trials)) {
+      message(sprintf("  trial %d/%d", k, n_trials))
+    }
     
     A_k <- A_base %*% rotations[[k]]
     
@@ -124,13 +161,19 @@ sim_eeg_master <- function(n_trials = 20,
     X_final[is.na(X_final)] <- 0
     X_Tensor[,,k] <- X_final
     
-    audit_list[[k]] <- c(
+    snr_denom <- g_bg^2 * P_bg
+    realized_snr <- if(P_task > 1e-12 && snr_denom > 1e-12) {
+      10 * log10(P_task / snr_denom)
+    } else {
+      NA_real_
+    }
+    
+    audit_list[[k]] <- data.frame(
       trial = k,
       class = cls,
-      Realized_SNR_Neural = 10*log10(P_task / (g_bg^2 * P_bg))
+      Realized_SNR_Neural = realized_snr
     )
   }
-  cat("Done.\n")
   
   audit_df <- do.call(rbind, audit_list)
   
@@ -139,6 +182,6 @@ sim_eeg_master <- function(n_trials = 20,
     geometry = geo,
     audit = audit_df,
     labels = class_labels,
-    params = list(fs=fs, target_freqs=target_freqs)
+    params = list(fs = fs, target_freqs = target_freqs, seed = seed)
   ))
 }

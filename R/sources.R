@@ -36,7 +36,7 @@ setup_var2_system <- function(n_sources, fs, target_freqs) {
     Phi2[i, i] <- -r_pole^2
   }
   
-  coupling_mask <- matrix(rbinom(n_sources^2, 1, 0.2), n_sources, n_sources)
+  coupling_mask <- matrix(stats::rbinom(n_sources^2, 1, 0.2), n_sources, n_sources)
   diag(coupling_mask) <- 0
   couplings_base <- matrix(rnorm(n_sources^2, 0, 0.05), n_sources, n_sources) * coupling_mask
   
@@ -132,12 +132,20 @@ sim_source_var2 <- function(n_time, n_sources, var_params) {
 #' @export
 sim_source_task <- function(n_time, n_sources, fs, 
                             tau_ms = 0, gamma = 1, active_idx = 1:3) {
+  if(!is.numeric(gamma) || length(gamma) != 1L || !is.finite(gamma) || gamma <= 0) {
+    stop("gamma must be a single positive finite number.")
+  }
   
   T_duration <- n_time / fs
   t_vec <- seq(0, T_duration, length.out = n_time) 
   center_time <- T_duration / 2
   S <- matrix(0, n_time, n_sources)
   tau_s <- tau_ms / 1000 
+  active_idx <- as.integer(active_idx)
+  active_idx <- unique(active_idx[is.finite(active_idx) & active_idx >= 1L & active_idx <= n_sources])
+  if(length(active_idx) == 0L) {
+    return(S)
+  }
   
   gabor <- function(t) {
     # Fix A1: Use 20 Hz carrier (Beta band) instead of 5Hz

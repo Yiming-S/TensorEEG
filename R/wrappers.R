@@ -20,6 +20,7 @@
 #' @param trials_per_run Integer. Number of trials per run (default: 20).
 #' @param gap_trials Integer. Number of "virtual" trials to simulate but discard between runs (default: 15).
 #'   Higher values create larger distributional shifts between runs.
+#' @param verbose Logical. If TRUE, prints run extraction progress.
 #' @param ... Additional arguments passed to \code{\link{sim_eeg_master}} (e.g., \code{n_time}, \code{n_sources}).
 #'
 #' @return A list formatted similarly to Physionet datasets, containing:
@@ -35,7 +36,8 @@
 sim_multirun_session <- function(n_runs = 3, 
                                  trials_per_run = 20, 
                                  gap_trials = 15,
-                                 ...) { # Pass other args (n_time, n_sources) to master
+                                 verbose = TRUE,
+                                 ...) {
   
   # 1. Calculate Total Trials needed
   # Structure: [Run 1] --gap-- [Run 2] --gap-- [Run 3]
@@ -43,13 +45,21 @@ sim_multirun_session <- function(n_runs = 3,
   total_gap_trials    <- (n_runs - 1) * gap_trials
   grand_total         <- total_active_trials + total_gap_trials
   
-  cat(sprintf("--- Simulating Multi-Run Session ---\n"))
-  cat(sprintf("Config: %d Runs, %d Trials/Run, %d Gap Trials (Drift Injection)\n", 
-              n_runs, trials_per_run, gap_trials))
+  if(verbose) {
+    message("--- Simulating Multi-Run Session ---")
+    message(sprintf(
+      "Config: %d Runs, %d Trials/Run, %d Gap Trials (Drift Injection)",
+      n_runs, trials_per_run, gap_trials
+    ))
+  }
   
   # 2. Run ONE Giant Simulation (Maintains Geometry & Drift Continuity)
-  # We pass '...' to sim_eeg_master to allow user control (e.g., target_freqs)
-  giant_sim <- sim_eeg_master(n_trials = grand_total, ...)
+  # We pass '...' to sim_eeg_master to allow user control (e.g., target_freqs).
+  dots <- list(...)
+  if("verbose" %in% names(dots)) {
+    stop("Pass verbose via sim_multirun_session(verbose = ...), not via ...")
+  }
+  giant_sim <- do.call(sim_eeg_master, c(list(n_trials = grand_total, verbose = verbose), dots))
   
   # 3. Slice and Dice (Extract Runs, Discard Gaps)
   final_x_list <- list()
@@ -58,11 +68,13 @@ sim_multirun_session <- function(n_runs = 3,
   
   current_idx <- 1
   
-  for(r in 1:n_runs) {
+  for(r in seq_len(n_runs)) {
     # Define start and end for this run
     end_idx <- current_idx + trials_per_run - 1
     
-    cat(sprintf("Extracting Run %d: Indices [%d - %d]\n", r, current_idx, end_idx))
+    if(verbose) {
+      message(sprintf("Extracting Run %d: Indices [%d - %d]", r, current_idx, end_idx))
+    }
     
     # Extract data slices
     for(k in current_idx:end_idx) {
@@ -91,4 +103,3 @@ sim_multirun_session <- function(n_runs = 3,
   
   return(formatted_data)
 }
-

@@ -44,7 +44,7 @@ generate_geometry_mixing <- function(n_channels = 64, n_sources = 10,
   # 1.1 Sensor Coordinates: Fibonacci Grid on Hemisphere
   idx <- 0:(n_channels - 1)
   # Correct mapping: z uniform [0, 1] preserves area
-  z <- runif(n_channels, 0, 1)
+  z <- stats::runif(n_channels, 0, 1)
   theta <- (sqrt(5) * pi * idx) %% (2 * pi)
   r_xy <- sqrt(1 - z^2)
   x <- r_xy * cos(theta)
@@ -55,7 +55,7 @@ generate_geometry_mixing <- function(n_channels = 64, n_sources = 10,
   coords_src <- matrix(0, n_sources, 3)
   count <- 0
   while(count < n_sources) {
-    pt <- runif(3, -0.8, 0.8)
+    pt <- stats::runif(3, -0.8, 0.8)
     if(sum(pt^2) < 0.8^2) {
       count <- count + 1
       coords_src[count, ] <- pt
