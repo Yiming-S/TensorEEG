@@ -35,14 +35,10 @@
 #' @export
 generate_drift_rotations <- function(n_sources, n_trials, 
                                      alpha_ou = 0.95, sigma_eps = 0.05) {
-  is_whole_number <- function(x) {
-    is.numeric(x) && length(x) == 1L && is.finite(x) &&
-      abs(x - round(x)) < .Machine$double.eps^0.5
-  }
-  if(!is_whole_number(n_sources) || n_sources < 1) {
+  if(!.is_whole_number(n_sources) || n_sources < 1) {
     stop("n_sources must be a positive integer.")
   }
-  if(!is_whole_number(n_trials) || n_trials < 1) {
+  if(!.is_whole_number(n_trials) || n_trials < 1) {
     stop("n_trials must be a positive integer.")
   }
   if(!is.numeric(alpha_ou) || length(alpha_ou) != 1L || !is.finite(alpha_ou) || abs(alpha_ou) >= 1) {

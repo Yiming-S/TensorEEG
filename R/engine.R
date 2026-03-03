@@ -46,7 +46,7 @@
 #'   \item{\code{params}}{List. Metadata including sampling rate and source frequencies.}
 #' }
 #'
-#' @importFrom stats rnorm rlnorm
+#' @importFrom stats rnorm rlnorm runif
 #' @export
 sim_eeg_master <- function(n_trials = 20, 
                            n_time = 500, 
@@ -60,20 +60,16 @@ sim_eeg_master <- function(n_trials = 20,
                            class_labels = NULL,
                            seed = NULL,
                            verbose = TRUE) {
-  is_whole_number <- function(x) {
-    is.numeric(x) && length(x) == 1L && is.finite(x) &&
-      abs(x - round(x)) < .Machine$double.eps^0.5
-  }
-  if(!is_whole_number(n_trials) || n_trials < 1) {
+  if(!.is_whole_number(n_trials) || n_trials < 1) {
     stop("n_trials must be a positive integer.")
   }
-  if(!is_whole_number(n_time) || n_time < 1) {
+  if(!.is_whole_number(n_time) || n_time < 1) {
     stop("n_time must be a positive integer.")
   }
-  if(!is_whole_number(n_channels) || n_channels < 1) {
+  if(!.is_whole_number(n_channels) || n_channels < 1) {
     stop("n_channels must be a positive integer.")
   }
-  if(!is_whole_number(n_sources) || n_sources < 1) {
+  if(!.is_whole_number(n_sources) || n_sources < 1) {
     stop("n_sources must be a positive integer.")
   }
   if(!is.numeric(fs) || length(fs) != 1L || !is.finite(fs) || fs <= 0) {
@@ -98,7 +94,7 @@ sim_eeg_master <- function(n_trials = 20,
   n_sources <- as.integer(round(n_sources))
   
   if(!is.null(seed)) {
-    if(!is_whole_number(seed)) {
+    if(!.is_whole_number(seed)) {
       stop("seed must be a single finite integer.")
     }
     set.seed(as.integer(round(seed)))

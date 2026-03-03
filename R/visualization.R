@@ -52,6 +52,9 @@
 #' @param save_path Character (optional). If provided, saves plot to PNG.
 #'
 #' @return Invisible list containing selected trial/time metadata and topography values.
+#' @importFrom graphics image lines points contour
+#' @importFrom grDevices png dev.off hcl.colors adjustcolor
+#' @importFrom stats dist median
 #' @export
 plot_topomap <- function(sim_res,
                          trial = 1,
@@ -160,6 +163,10 @@ plot_topomap <- function(sim_res,
 #' @param save_path Character (optional). If provided, saves plot to PNG.
 #'
 #' @return Invisible data frame with trial-level metric values.
+#' @importFrom graphics boxplot lines
+#' @importFrom grDevices png dev.off hcl.colors
+#' @importFrom stats spectrum cov
+#' @importFrom signal butter filtfilt
 #' @export
 plot_run_drift <- function(session_res,
                            metric = c("bandpower", "cov_distance", "mean_abs"),
@@ -277,6 +284,9 @@ plot_run_drift <- function(session_res,
 #' @param save_path Character (optional). If provided, saves plot to PNG.
 #'
 #' @return Invisible list with RMS summary.
+#' @importFrom graphics par plot
+#' @importFrom grDevices png dev.off
+#' @importFrom stats spectrum
 #' @export
 plot_artifact_components <- function(artifact_res,
                                      fs,

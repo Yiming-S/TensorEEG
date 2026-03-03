@@ -1,3 +1,13 @@
+#' Check Whether a Value is a Whole Number
+#'
+#' @param x Value to test.
+#' @return Logical scalar.
+#' @keywords internal
+.is_whole_number <- function(x) {
+  is.numeric(x) && length(x) == 1L && is.finite(x) &&
+    abs(x - round(x)) < .Machine$double.eps^0.5
+}
+
 #' Compute Radial Basis Function (RBF) Kernel
 #'
 #' @description

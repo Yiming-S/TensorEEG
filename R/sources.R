@@ -23,13 +23,10 @@
 #' \item{Phi1}{Matrix (n_sources x n_sources). Lag-1 coefficients.}
 #' \item{Phi2}{Matrix (n_sources x n_sources). Lag-2 coefficients.}
 #'
+#' @importFrom stats rbinom rnorm
 #' @export
 setup_var2_system <- function(n_sources, fs, target_freqs) {
-  is_whole_number <- function(x) {
-    is.numeric(x) && length(x) == 1L && is.finite(x) &&
-      abs(x - round(x)) < .Machine$double.eps^0.5
-  }
-  if(!is_whole_number(n_sources) || n_sources < 1) {
+  if(!.is_whole_number(n_sources) || n_sources < 1) {
     stop("n_sources must be a positive integer.")
   }
   if(!is.numeric(fs) || length(fs) != 1L || !is.finite(fs) || fs <= 0) {
@@ -108,14 +105,10 @@ setup_var2_system <- function(n_sources, fs, target_freqs) {
 #' @importFrom stats rnorm
 #' @export
 sim_source_var2 <- function(n_time, n_sources, var_params) {
-  is_whole_number <- function(x) {
-    is.numeric(x) && length(x) == 1L && is.finite(x) &&
-      abs(x - round(x)) < .Machine$double.eps^0.5
-  }
-  if(!is_whole_number(n_time) || n_time < 1) {
+  if(!.is_whole_number(n_time) || n_time < 1) {
     stop("n_time must be a positive integer.")
   }
-  if(!is_whole_number(n_sources) || n_sources < 1) {
+  if(!.is_whole_number(n_sources) || n_sources < 1) {
     stop("n_sources must be a positive integer.")
   }
   if(!is.list(var_params) || is.null(var_params$Phi1) || is.null(var_params$Phi2)) {
@@ -174,16 +167,12 @@ sim_source_var2 <- function(n_time, n_sources, var_params) {
 #' @return Numeric matrix (n_time x n_sources). The task-related source activity.
 #'
 #' @export
-sim_source_task <- function(n_time, n_sources, fs, 
+sim_source_task <- function(n_time, n_sources, fs,
                             tau_ms = 0, gamma = 1, active_idx = 1:3) {
-  is_whole_number <- function(x) {
-    is.numeric(x) && length(x) == 1L && is.finite(x) &&
-      abs(x - round(x)) < .Machine$double.eps^0.5
-  }
-  if(!is_whole_number(n_time) || n_time < 1) {
+  if(!.is_whole_number(n_time) || n_time < 1) {
     stop("n_time must be a positive integer.")
   }
-  if(!is_whole_number(n_sources) || n_sources < 1) {
+  if(!.is_whole_number(n_sources) || n_sources < 1) {
     stop("n_sources must be a positive integer.")
   }
   if(!is.numeric(fs) || length(fs) != 1L || !is.finite(fs) || fs <= 0) {

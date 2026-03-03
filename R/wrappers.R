@@ -38,17 +38,13 @@ sim_multirun_session <- function(n_runs = 3,
                                  gap_trials = 15,
                                  verbose = TRUE,
                                  ...) {
-  is_whole_number <- function(x) {
-    is.numeric(x) && length(x) == 1L && is.finite(x) &&
-      abs(x - round(x)) < .Machine$double.eps^0.5
-  }
-  if(!is_whole_number(n_runs) || n_runs < 1) {
+  if(!.is_whole_number(n_runs) || n_runs < 1) {
     stop("n_runs must be a positive integer.")
   }
-  if(!is_whole_number(trials_per_run) || trials_per_run < 1) {
+  if(!.is_whole_number(trials_per_run) || trials_per_run < 1) {
     stop("trials_per_run must be a positive integer.")
   }
-  if(!is_whole_number(gap_trials) || gap_trials < 0) {
+  if(!.is_whole_number(gap_trials) || gap_trials < 0) {
     stop("gap_trials must be a non-negative integer.")
   }
   if(!is.logical(verbose) || length(verbose) != 1L || is.na(verbose)) {

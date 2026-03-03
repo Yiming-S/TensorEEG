@@ -39,8 +39,9 @@
 #' @return Invisible metrics list. If \code{return_metrics = TRUE}, the metrics list
 #'   is returned explicitly.
 #'
-#' @importFrom stats spectrum cov
-#' @importFrom graphics par plot lines legend abline image
+#' @importFrom stats spectrum cov median sd
+#' @importFrom graphics par plot lines legend abline image plot.new text
+#' @importFrom grDevices png dev.off rgb
 #' @importFrom signal butter filtfilt
 #' @export
 validate_sim_eeg <- function(sim_res,

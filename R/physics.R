@@ -36,18 +36,14 @@
 #'   \item{\code{L_sym}}{Matrix (n_channels x n_channels). The normalized graph Laplacian used for the smoothing operator.}
 #' }
 #'
-#' @importFrom stats dist
+#' @importFrom stats dist runif
 #' @export
 generate_geometry_mixing <- function(n_channels = 64, n_sources = 10, 
                                      sigma_geo = 0.3, lambda_smooth = 0.5) {
-  is_whole_number <- function(x) {
-    is.numeric(x) && length(x) == 1L && is.finite(x) &&
-      abs(x - round(x)) < .Machine$double.eps^0.5
-  }
-  if(!is_whole_number(n_channels) || n_channels < 1) {
+  if(!.is_whole_number(n_channels) || n_channels < 1) {
     stop("n_channels must be a positive integer.")
   }
-  if(!is_whole_number(n_sources) || n_sources < 1) {
+  if(!.is_whole_number(n_sources) || n_sources < 1) {
     stop("n_sources must be a positive integer.")
   }
   if(!is.numeric(sigma_geo) || length(sigma_geo) != 1L || !is.finite(sigma_geo) || sigma_geo <= 0) {
