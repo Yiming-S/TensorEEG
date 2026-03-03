@@ -35,21 +35,48 @@
 #' @export
 generate_drift_rotations <- function(n_sources, n_trials, 
                                      alpha_ou = 0.95, sigma_eps = 0.05) {
-  G <- matrix(rnorm(n_sources^2), n_sources, n_sources)
+  is_whole_number <- function(x) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) &&
+      abs(x - round(x)) < .Machine$double.eps^0.5
+  }
+  if(!is_whole_number(n_sources) || n_sources < 1) {
+    stop("n_sources must be a positive integer.")
+  }
+  if(!is_whole_number(n_trials) || n_trials < 1) {
+    stop("n_trials must be a positive integer.")
+  }
+  if(!is.numeric(alpha_ou) || length(alpha_ou) != 1L || !is.finite(alpha_ou) || abs(alpha_ou) >= 1) {
+    stop("alpha_ou must be a single finite number in (-1, 1).")
+  }
+  if(!is.numeric(sigma_eps) || length(sigma_eps) != 1L || !is.finite(sigma_eps) || sigma_eps < 0) {
+    stop("sigma_eps must be a single non-negative finite number.")
+  }
+  
+  n_sources <- as.integer(round(n_sources))
+  n_trials <- as.integer(round(n_trials))
+  
+  if(n_sources == 1L) {
+    return(rep(list(matrix(1, 1, 1)), n_trials))
+  }
+  
+  G <- matrix(stats::rnorm(n_sources^2), n_sources, n_sources)
   Omega_base <- (G - t(G)) / 2
   frob_norm <- sqrt(sum(Omega_base^2))
+  if(frob_norm <= .Machine$double.eps) {
+    return(rep(list(diag(n_sources)), n_trials))
+  }
   Omega_base <- Omega_base / frob_norm
   
   theta <- numeric(n_trials)
   theta[1] <- 0
-  noise <- rnorm(n_trials, 0, sigma_eps)
+  noise <- stats::rnorm(n_trials, 0, sigma_eps)
   
   for(k in 2:n_trials) {
     theta[k] <- alpha_ou * theta[k-1] + noise[k]
   }
   
-  R_list <- list()
-  for(k in 1:n_trials) {
+  R_list <- vector("list", n_trials)
+  for(k in seq_len(n_trials)) {
     R_list[[k]] <- expm::expm(theta[k] * Omega_base)
   }
   

@@ -40,6 +40,24 @@
 #' @export
 generate_geometry_mixing <- function(n_channels = 64, n_sources = 10, 
                                      sigma_geo = 0.3, lambda_smooth = 0.5) {
+  is_whole_number <- function(x) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) &&
+      abs(x - round(x)) < .Machine$double.eps^0.5
+  }
+  if(!is_whole_number(n_channels) || n_channels < 1) {
+    stop("n_channels must be a positive integer.")
+  }
+  if(!is_whole_number(n_sources) || n_sources < 1) {
+    stop("n_sources must be a positive integer.")
+  }
+  if(!is.numeric(sigma_geo) || length(sigma_geo) != 1L || !is.finite(sigma_geo) || sigma_geo <= 0) {
+    stop("sigma_geo must be a single positive finite number.")
+  }
+  if(!is.numeric(lambda_smooth) || length(lambda_smooth) != 1L || !is.finite(lambda_smooth) || lambda_smooth < 0) {
+    stop("lambda_smooth must be a single non-negative finite number.")
+  }
+  n_channels <- as.integer(round(n_channels))
+  n_sources <- as.integer(round(n_sources))
   
   # 1.1 Sensor Coordinates: Fibonacci Grid on Hemisphere
   idx <- 0:(n_channels - 1)
@@ -67,21 +85,28 @@ generate_geometry_mixing <- function(n_channels = 64, n_sources = 10,
                       sigma = sigma_geo, standard_scale = TRUE)
   
   # 1.4 Normalized Laplacian Smoothing (Weighted Adjacency)
-  dist_SS <- as.matrix(dist(coords_sens))
-  k_nn <- 4
-  W <- matrix(0, n_channels, n_channels)
-  sigma_w <- mean(dist_SS) * 0.5 
-  
-  for(i in 1:n_channels) {
-    nbs <- order(dist_SS[i,])[2:(k_nn+1)]
-    W[i, nbs] <- exp(-dist_SS[i, nbs]^2 / (2 * sigma_w^2))
-    W[nbs, i] <- W[i, nbs] 
+  if(n_channels == 1L) {
+    L_sym <- matrix(0, 1, 1)
+  } else {
+    dist_SS <- as.matrix(dist(coords_sens))
+    k_nn <- min(4L, n_channels - 1L)
+    W <- matrix(0, n_channels, n_channels)
+    sigma_w <- mean(dist_SS[upper.tri(dist_SS)])
+    if(!is.finite(sigma_w) || sigma_w <= 0) {
+      sigma_w <- 1
+    }
+    
+    for(i in seq_len(n_channels)) {
+      nbs <- order(dist_SS[i, ])[2:(k_nn + 1L)]
+      W[i, nbs] <- exp(-dist_SS[i, nbs]^2 / (2 * sigma_w^2))
+      W[nbs, i] <- W[i, nbs] 
+    }
+    
+    deg <- rowSums(W)
+    deg[deg == 0] <- 1 
+    D_inv_sqrt <- diag(1 / sqrt(deg))
+    L_sym <- diag(n_channels) - D_inv_sqrt %*% W %*% D_inv_sqrt
   }
-  
-  deg <- rowSums(W)
-  deg[deg == 0] <- 1 
-  D_inv_sqrt <- diag(1 / sqrt(deg))
-  L_sym <- diag(n_channels) - D_inv_sqrt %*% W %*% D_inv_sqrt
   
   H <- solve(diag(n_channels) + lambda_smooth * L_sym)
   A_smooth <- H %*% A_raw

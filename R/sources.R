@@ -25,12 +25,32 @@
 #'
 #' @export
 setup_var2_system <- function(n_sources, fs, target_freqs) {
+  is_whole_number <- function(x) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) &&
+      abs(x - round(x)) < .Machine$double.eps^0.5
+  }
+  if(!is_whole_number(n_sources) || n_sources < 1) {
+    stop("n_sources must be a positive integer.")
+  }
+  if(!is.numeric(fs) || length(fs) != 1L || !is.finite(fs) || fs <= 0) {
+    stop("fs must be a single positive finite number.")
+  }
+  n_sources <- as.integer(round(n_sources))
+  
+  if(!is.numeric(target_freqs) || length(target_freqs) != n_sources || any(!is.finite(target_freqs))) {
+    stop("target_freqs must be a finite numeric vector of length n_sources.")
+  }
+  target_freqs <- as.numeric(target_freqs)
+  nyquist <- fs / 2
+  if(any(target_freqs <= 0) || any(target_freqs >= nyquist)) {
+    stop(sprintf("target_freqs values must be in (0, fs/2 = %.3f).", nyquist))
+  }
   
   Phi1 <- matrix(0, n_sources, n_sources)
   Phi2 <- matrix(0, n_sources, n_sources)
   r_pole <- 0.95 
   
-  for(i in 1:n_sources) {
+  for(i in seq_len(n_sources)) {
     omega <- 2 * pi * target_freqs[i] / fs
     Phi1[i, i] <- 2 * r_pole * cos(omega)
     Phi2[i, i] <- -r_pole^2
@@ -38,7 +58,7 @@ setup_var2_system <- function(n_sources, fs, target_freqs) {
   
   coupling_mask <- matrix(stats::rbinom(n_sources^2, 1, 0.2), n_sources, n_sources)
   diag(coupling_mask) <- 0
-  couplings_base <- matrix(rnorm(n_sources^2, 0, 0.05), n_sources, n_sources) * coupling_mask
+  couplings_base <- matrix(stats::rnorm(n_sources^2, 0, 0.05), n_sources, n_sources) * coupling_mask
   
   is_stable <- FALSE
   gamma <- 1.0 
@@ -60,7 +80,9 @@ setup_var2_system <- function(n_sources, fs, target_freqs) {
     }
   }
   
-  if(!is_stable) Phi1 <- Phi1 * diag(n_sources)
+  if(!is_stable) {
+    Phi1 <- diag(diag(Phi1), n_sources, n_sources)
+  }
   
   return(list(Phi1 = Phi1, Phi2 = Phi2))
 }
@@ -86,11 +108,33 @@ setup_var2_system <- function(n_sources, fs, target_freqs) {
 #' @importFrom stats rnorm
 #' @export
 sim_source_var2 <- function(n_time, n_sources, var_params) {
-  Phi1 <- var_params$Phi1
-  Phi2 <- var_params$Phi2
-  S <- matrix(0, n_time, n_sources)
+  is_whole_number <- function(x) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) &&
+      abs(x - round(x)) < .Machine$double.eps^0.5
+  }
+  if(!is_whole_number(n_time) || n_time < 1) {
+    stop("n_time must be a positive integer.")
+  }
+  if(!is_whole_number(n_sources) || n_sources < 1) {
+    stop("n_sources must be a positive integer.")
+  }
+  if(!is.list(var_params) || is.null(var_params$Phi1) || is.null(var_params$Phi2)) {
+    stop("var_params must be a list containing Phi1 and Phi2.")
+  }
+  n_time <- as.integer(round(n_time))
+  n_sources <- as.integer(round(n_sources))
+  
+  Phi1 <- as.matrix(var_params$Phi1)
+  Phi2 <- as.matrix(var_params$Phi2)
+  if(!all(dim(Phi1) == c(n_sources, n_sources)) || !all(dim(Phi2) == c(n_sources, n_sources))) {
+    stop("Phi1 and Phi2 must both be matrices of size n_sources x n_sources.")
+  }
+  if(any(!is.finite(Phi1)) || any(!is.finite(Phi2))) {
+    stop("Phi1 and Phi2 must contain only finite values.")
+  }
+  
   burn_in <- 500
-  noise <- matrix(rnorm((n_time + burn_in) * n_sources), n_time + burn_in, n_sources)
+  noise <- matrix(stats::rnorm((n_time + burn_in) * n_sources), n_time + burn_in, n_sources)
   S_temp <- matrix(0, n_time + burn_in, n_sources)
   
   for(t in 3:(n_time + burn_in)) {
@@ -99,7 +143,7 @@ sim_source_var2 <- function(n_time, n_sources, var_params) {
     S_temp[t, ] <- val
   }
   
-  result <- S_temp[(burn_in + 1):(n_time + burn_in), ]
+  result <- S_temp[(burn_in + 1):(n_time + burn_in), , drop = FALSE]
   result <- sweep(result, 2, colMeans(result), "-")
   return(result)
 }
@@ -132,16 +176,43 @@ sim_source_var2 <- function(n_time, n_sources, var_params) {
 #' @export
 sim_source_task <- function(n_time, n_sources, fs, 
                             tau_ms = 0, gamma = 1, active_idx = 1:3) {
+  is_whole_number <- function(x) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) &&
+      abs(x - round(x)) < .Machine$double.eps^0.5
+  }
+  if(!is_whole_number(n_time) || n_time < 1) {
+    stop("n_time must be a positive integer.")
+  }
+  if(!is_whole_number(n_sources) || n_sources < 1) {
+    stop("n_sources must be a positive integer.")
+  }
+  if(!is.numeric(fs) || length(fs) != 1L || !is.finite(fs) || fs <= 0) {
+    stop("fs must be a single positive finite number.")
+  }
+  if(!is.numeric(tau_ms) || length(tau_ms) != 1L || !is.finite(tau_ms)) {
+    stop("tau_ms must be a single finite number.")
+  }
   if(!is.numeric(gamma) || length(gamma) != 1L || !is.finite(gamma) || gamma <= 0) {
     stop("gamma must be a single positive finite number.")
   }
+  if(!is.null(active_idx) && !(is.numeric(active_idx) || is.integer(active_idx))) {
+    stop("active_idx must be a numeric or integer vector of source indices.")
+  }
+  
+  n_time <- as.integer(round(n_time))
+  n_sources <- as.integer(round(n_sources))
   
   T_duration <- n_time / fs
-  t_vec <- seq(0, T_duration, length.out = n_time) 
+  t_vec <- (seq_len(n_time) - 1) / fs
   center_time <- T_duration / 2
   S <- matrix(0, n_time, n_sources)
   tau_s <- tau_ms / 1000 
-  active_idx <- as.integer(active_idx)
+  if(is.null(active_idx)) {
+    active_idx <- integer(0)
+  }
+  is_valid_idx <- is.finite(active_idx) &
+    abs(active_idx - round(active_idx)) < .Machine$double.eps^0.5
+  active_idx <- as.integer(active_idx[is_valid_idx])
   active_idx <- unique(active_idx[is.finite(active_idx) & active_idx >= 1L & active_idx <= n_sources])
   if(length(active_idx) == 0L) {
     return(S)

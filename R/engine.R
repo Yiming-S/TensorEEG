@@ -60,34 +60,82 @@ sim_eeg_master <- function(n_trials = 20,
                            class_labels = NULL,
                            seed = NULL,
                            verbose = TRUE) {
-  if(!is.null(seed)) {
-    if(!is.numeric(seed) || length(seed) != 1L || !is.finite(seed)) {
-      stop("seed must be a single finite number.")
-    }
-    set.seed(as.integer(seed))
+  is_whole_number <- function(x) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) &&
+      abs(x - round(x)) < .Machine$double.eps^0.5
   }
-  if(!is.numeric(n_trials) || length(n_trials) != 1L || !is.finite(n_trials) || n_trials < 1) {
+  if(!is_whole_number(n_trials) || n_trials < 1) {
     stop("n_trials must be a positive integer.")
   }
-  n_trials <- as.integer(n_trials)
+  if(!is_whole_number(n_time) || n_time < 1) {
+    stop("n_time must be a positive integer.")
+  }
+  if(!is_whole_number(n_channels) || n_channels < 1) {
+    stop("n_channels must be a positive integer.")
+  }
+  if(!is_whole_number(n_sources) || n_sources < 1) {
+    stop("n_sources must be a positive integer.")
+  }
+  if(!is.numeric(fs) || length(fs) != 1L || !is.finite(fs) || fs <= 0) {
+    stop("fs must be a single positive finite number.")
+  }
+  if(!is.numeric(snr_neural_db) || length(snr_neural_db) != 1L || !is.finite(snr_neural_db)) {
+    stop("snr_neural_db must be a single finite number.")
+  }
+  if(!is.numeric(snr_artifact_db) || length(snr_artifact_db) != 1L || !is.finite(snr_artifact_db)) {
+    stop("snr_artifact_db must be a single finite number.")
+  }
+  if(!is.numeric(drift_power_ratio) || length(drift_power_ratio) != 1L || !is.finite(drift_power_ratio) || drift_power_ratio < 0) {
+    stop("drift_power_ratio must be a single non-negative finite number.")
+  }
+  if(!is.logical(verbose) || length(verbose) != 1L || is.na(verbose)) {
+    stop("verbose must be TRUE or FALSE.")
+  }
+  
+  n_trials <- as.integer(round(n_trials))
+  n_time <- as.integer(round(n_time))
+  n_channels <- as.integer(round(n_channels))
+  n_sources <- as.integer(round(n_sources))
+  
+  if(!is.null(seed)) {
+    if(!is_whole_number(seed)) {
+      stop("seed must be a single finite integer.")
+    }
+    set.seed(as.integer(round(seed)))
+  }
   
   if(!is.numeric(target_freqs) && !is.null(target_freqs)) {
     stop("target_freqs must be NULL or a numeric vector of length n_sources.")
   }
+  nyquist <- fs / 2
   if(is.null(target_freqs)) {
-    target_freqs <- stats::runif(n_sources, 8, 20)
+    lower <- min(8, nyquist * 0.25)
+    upper <- min(20, nyquist * 0.9)
+    if(lower <= 0 || upper <= 0 || lower >= upper) {
+      stop("fs is too low for default target_freqs; please provide target_freqs in (0, fs/2).")
+    }
+    target_freqs <- stats::runif(n_sources, lower, upper)
   } else {
     if(length(target_freqs) != n_sources) {
       stop("target_freqs must have length n_sources.")
     }
     target_freqs <- as.numeric(target_freqs)
+    if(any(!is.finite(target_freqs)) || any(target_freqs <= 0) || any(target_freqs >= nyquist)) {
+      stop("target_freqs must contain finite values in (0, fs/2).")
+    }
   }
   
   if(is.null(class_labels)) {
     class_labels <- rep(c(0L, 1L), length.out = n_trials)
   } else {
+    if(!(is.numeric(class_labels) || is.integer(class_labels))) {
+      stop("class_labels must be a numeric/integer vector containing only 0 and 1.")
+    }
     if(length(class_labels) != n_trials) {
       stop("class_labels must have length n_trials.")
+    }
+    if(any(!is.finite(class_labels)) || any(abs(class_labels - round(class_labels)) >= .Machine$double.eps^0.5)) {
+      stop("class_labels must only contain integer 0 and 1 values.")
     }
     class_labels <- as.integer(class_labels)
     if(any(is.na(class_labels)) || !all(class_labels %in% c(0L, 1L))) {

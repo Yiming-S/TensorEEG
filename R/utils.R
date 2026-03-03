@@ -60,6 +60,15 @@ rbf_kernel <- function(x, y, sigma, standard_scale = TRUE) {
 #' @importFrom signal butter filtfilt
 #' @export
 calc_ac_power <- function(X, fs) {
+  if(!is.matrix(X) || !is.numeric(X)) {
+    stop("X must be a numeric matrix [time x channels].")
+  }
+  if(nrow(X) < 1 || ncol(X) < 1) {
+    stop("X must have at least one row and one column.")
+  }
+  if(!is.numeric(fs) || length(fs) != 1L || !is.finite(fs) || fs <= 0) {
+    stop("fs must be a single positive finite number.")
+  }
   if(any(is.na(X)) || any(is.infinite(X))) return(0)
   
   # Fix B1: Use 0.1 Hz to capture drift AC components better

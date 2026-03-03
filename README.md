@@ -34,7 +34,7 @@ $$
 where $\theta_k$ follows a mean-reverting Ornstein-Uhlenbeck process. This produces data that strictly adheres to **PARAFAC2** structures (shared covariance eigenvalues, evolving eigenvectors).
 
 ### 3. Closed-Loop SNR Calibration
-TensorEEG implements an **Effective AC Power** ($P_{AC}$) metric using a 4th-order Butterworth high-pass filter ($f_c = 1.0$ Hz). This prevents high-amplitude low-frequency drifts from skewing Signal-to-Noise Ratio (SNR) calculations, ensuring precise control over neural vs. artifact energy.
+TensorEEG implements an **Effective AC Power** ($P_{AC}$) metric using a 4th-order Butterworth high-pass filter ($f_c = 0.1$ Hz). This prevents high-amplitude low-frequency drifts from skewing Signal-to-Noise Ratio (SNR) calculations, ensuring precise control over neural vs. artifact energy.
 
 ---
 
@@ -45,3 +45,21 @@ You can install the development version from GitHub:
 ```r
 # install.packages("devtools")
 devtools::install_github("Yiming-S/TensorEEG")
+```
+
+## Quick Start
+
+```r
+library(TensorEEG)
+
+sim <- sim_eeg_master(
+  n_trials = 20,
+  n_time = 500,
+  n_channels = 64,
+  n_sources = 10,
+  seed = 42,
+  verbose = FALSE
+)
+
+str(sim$data)
+```
