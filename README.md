@@ -63,3 +63,14 @@ sim <- sim_eeg_master(
 
 str(sim$data)
 ```
+
+## References
+
+1. Harshman, R. A. (1972). *PARAFAC2: Mathematical and technical notes*. UCLA Working Papers in Phonetics.
+2. Lütkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*. Springer.
+3. Uhlenbeck, G. E., & Ornstein, L. S. (1930). On the theory of the Brownian motion. *Physical Review*, 36(5), 823-841.
+4. Higham, N. J. (2008). *Functions of Matrices: Theory and Computation*. SIAM.
+5. Chung, F. R. K. (1997). *Spectral Graph Theory*. American Mathematical Society.
+6. Tikhonov, A. N., & Arsenin, V. Y. (1977). *Solutions of Ill-posed Problems*. Winston & Sons.
+7. Nunez, P. L., & Srinivasan, R. (2006). *Electric Fields of the Brain: The Neurophysics of EEG* (2nd ed.). Oxford University Press.
+8. Barachant, A., Bonnet, S., Congedo, M., & Jutten, C. (2012). Multiclass brain-computer interface classification by Riemannian geometry. *IEEE Transactions on Biomedical Engineering*, 59(4), 920-928.
