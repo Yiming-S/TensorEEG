@@ -1,0 +1,181 @@
+---
+title: "TensorEEG Validation: Spatial & Temporal Covariance"
+author: "Yiming Shen"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{TensorEEG Validation: Spatial & Temporal Covariance}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 5
+)
+library(TensorEEG)
+```
+
+## Purpose
+
+This vignette is the validation walkthrough for the TensorEEG simulation
+engine. It mathematically verifies that the synthetic data produced by
+`sim_eeg_master()` adheres to two physical constraints of real EEG:
+
+1. **Spatial domain (volume conduction & rank deficiency).** Real EEG is
+   not full rank --- a small number of latent cortical sources drive
+   many sensors. We check this with the eigenvalue spectrum of the
+   spatial covariance and look for off-diagonal sensor coupling
+   indicative of volume conduction.
+
+2. **Temporal domain (oscillatory dynamics).** The VAR(2) background
+   process should generate stable oscillations rather than white noise.
+   We verify this with the temporal covariance structure and the
+   autocorrelation function (ACF), which should peak at lags
+   corresponding to the configured target frequencies.
+
+Successful validation confirms the synthetic tensor is suitable for
+tensor decomposition, Riemannian-geometry benchmarking, or as the
+SimEEG positive-control input to the covariance-aware augmentation
+audit (see `vignette("covariance-audit")`).
+
+## Generate a synthetic tensor
+
+```{r run-sim}
+set.seed(42)
+fixed_freqs <- c(10, 12, 10, 10, 20, 20, 22, 20, 10, 20)
+sim_result <- sim_eeg_master(
+  n_trials = 10,
+  n_time = 500,
+  n_channels = 64,
+  target_freqs = fixed_freqs,
+  drift_power_ratio = 0.5
+)
+str(sim_result, max.level = 2)
+```
+
+We extract the first trial and apply a 1 Hz high-pass filter to remove
+slow drift. Slow drift is real but would mask the fine covariance
+structure we want to validate here.
+
+```{r prep}
+X_raw <- sim_result$data[, , 1]
+fs <- sim_result$params$fs
+bf_hp <- signal::butter(4, 1 / (fs / 2), type = "high")
+X_neural <- apply(X_raw, 2, function(x) signal::filtfilt(bf_hp, x))
+dim(X_neural)
+```
+
+## Module A: spatial covariance
+
+Objective: verify volume conduction effects and low-rank structure.
+
+```{r spatial}
+S_cov <- cov(X_neural)
+eigen_S <- eigen(S_cov, only.values = TRUE)$values
+eigen_norm <- eigen_S / sum(eigen_S)
+round(head(eigen_norm, 12), 4)
+```
+
+The first ten eigenvalues should dominate the spectrum, reflecting the
+ten latent sources used to generate the trial.
+
+## Module B: temporal covariance and oscillatory content
+
+Objective: verify oscillatory dynamics and stationarity. We compute the
+temporal covariance over the first 0.8 s and the average ACF across
+sensors, looking for peaks at the lags corresponding to 10 Hz (100 ms)
+and 20 Hz (50 ms).
+
+```{r temporal}
+t_subset <- 1:200
+X_sub <- X_neural[t_subset, ]
+X_sub <- sweep(X_sub, 2, colMeans(X_sub), "-")
+T_cov <- (X_sub %*% t(X_sub)) / ncol(X_sub)
+dim(T_cov)
+
+acf_avg <- rowMeans(apply(X_neural, 2, function(x) {
+  acf(x, lag.max = 100, plot = FALSE)$acf
+}))
+lags_ms <- (0:100) / fs * 1000
+```
+
+## Visualisation dashboard
+
+```{r dashboard, fig.width = 8, fig.height = 7}
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 2))
+
+# Plot 1: spatial covariance heatmap
+image(S_cov[, ncol(S_cov):1],
+      main = "Spatial covariance (64 x 64)",
+      axes = FALSE,
+      col = grDevices::hcl.colors(20, "YlOrRd", rev = TRUE))
+mtext("Sensor i", side = 2, line = 1)
+mtext("Sensor j", side = 1, line = 1)
+box()
+
+# Plot 2: scree plot
+plot(eigen_norm[1:20], type = "b", pch = 19, col = "blue", lwd = 2,
+     main = "Spatial eigenvalues (rank test)",
+     xlab = "Component index", ylab = "Explained variance ratio")
+abline(v = 10, col = "red", lty = 2)
+text(10, max(eigen_norm) * 0.8, "True sources = 10",
+     col = "red", pos = 4)
+
+# Plot 3: temporal covariance
+image(T_cov[, ncol(T_cov):1],
+      main = "Temporal covariance (0-0.8 s)",
+      axes = FALSE,
+      col = grDevices::hcl.colors(20, "Viridis"))
+mtext("Time t1", side = 2, line = 1)
+mtext("Time t2", side = 1, line = 1)
+box()
+
+# Plot 4: average ACF
+plot(lags_ms, acf_avg, type = "l", lwd = 2, col = "darkgreen",
+     main = "Average autocorrelation (ACF)",
+     xlab = "Lag (ms)", ylab = "Correlation")
+abline(h = 0, col = "gray", lty = 2)
+abline(v = c(50, 100), col = "red", lty = 3)
+text(50,  0.5, "20 Hz",  col = "red", pos = 3, cex = 0.8)
+text(100, 0.5, "10 Hz",  col = "red", pos = 3, cex = 0.8)
+
+par(op)
+```
+
+### Interpretation
+
+- **Spatial covariance heatmap.** Block-like off-diagonal structure
+  reflects neighbouring-sensor coupling from volume conduction.
+- **Scree plot.** Eigenvalues should drop sharply after index 10 and
+  enter a noise plateau, confirming the latent-source rank.
+- **Temporal covariance.** A checkerboard pattern parallel to the main
+  diagonal indicates periodic oscillatory structure rather than
+  unstructured white noise.
+- **Average ACF.** Distinct side-lobe peaks at 50 ms and 100 ms
+  correspond to the 20 Hz beta and 10 Hz alpha frequencies configured
+  in `target_freqs`.
+
+If all four panels look as described, the simulation engine is producing
+trials whose spatial-temporal covariance structure matches the
+neurophysiological priors used to design TensorEEG.
+
+## Next steps
+
+- See `vignette("covariance-audit")` for an end-to-end demonstration of
+  the four covariance augmentation routines (E0, G0, G1, G2) and the
+  six-metric fidelity audit on these covariances.
+- See `vignette("manifest-replay")` for using the calibration manifest
+  written by the Python protocol driver to replay synthetic stacks
+  byte-equivalently in R.
+
+## Reference
+
+Shen, Y., & Degras, D. (2026). *Covariance Geometry as a Safety
+Constraint for Cross-Session BCI Augmentation: A Multi-Dataset
+Non-Inferiority and Fidelity Audit.*

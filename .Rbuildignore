@@ -5,5 +5,8 @@
 ^Rplots\.pdf$
 ^Test$
 ^Test/
+^data-raw$
 ^.*\.Rcheck$
 ^TensorEEG_.*\.tar\.gz$
+^LICENSE\.md$
+^\.github$

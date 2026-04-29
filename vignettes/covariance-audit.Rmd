@@ -1,0 +1,209 @@
+---
+title: "Covariance-Aware Augmentation Audit (E0, G0, G1, G2)"
+author: "Yiming Shen"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Covariance-Aware Augmentation Audit (E0, G0, G1, G2)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4.5
+)
+library(TensorEEG)
+```
+
+## What this vignette demonstrates
+
+This vignette is the R-side counterpart of the Python protocol scripts
+in `scripts/protocol/` for Shen & Degras (2026). It walks through:
+
+1. Loading the bundled example SPD anchor stack.
+2. Generating synthetic covariances with the four covariance-aware
+   augmentation routines used in the multi-dataset audit ---
+   E0 (off-manifold control), G0, G1, and G2.
+3. Running the six-metric fidelity audit against the class-mean
+   covariance reference.
+4. Tabulating the results so they can be compared to the manuscript's
+   Table 5.
+
+The audit answers a single question: **for a fixed set of source
+anchors, which augmentation rule keeps the synthetic covariance stack
+closest to the real class geometry?** The expected ordering at the
+covariance-distance metrics is
+
+$$\text{E0} \;>\; \text{G0} \;>\; \text{G1} \;>\; \text{G2}$$
+
+with G2 (log-Euclidean geodesic mixup) the most fidelity-preserving.
+
+## Load the example anchors
+
+```{r load-anchors}
+data(example_anchors)
+labels <- readRDS(system.file("extdata", "example_labels.rds",
+                              package = "TensorEEG"))
+
+length(example_anchors)
+dim(example_anchors[[1]])
+table(labels)
+```
+
+The eight anchors split evenly into class 0 (10 Hz alpha-like) and
+class 1 (6 Hz lower-frequency); each is a 6 x 6 SPD covariance.
+
+## Run the four augmentation routines
+
+We fix the per-method seed so the table below is exactly reproducible
+across machines. The augmentation ratio `n_aug = 3` matches the
+revised primary protocol (synthetic:real ratio of 3 per anchor).
+
+```{r run-augmentations}
+n_aug <- 3L
+g0_sigma <- 0.15
+
+aug_g0 <- augment_cov_riemannian(
+  example_anchors,
+  n_aug = n_aug, sigma = g0_sigma,
+  labels = labels, seed = 1002L
+)
+
+aug_e0 <- augment_cov_amplitude_matched_euclidean(
+  example_anchors,
+  n_aug = n_aug, g0_sigma = g0_sigma,
+  labels = labels, seed = 1001L
+)
+
+aug_g1 <- augment_cov_empirical_tangent(
+  example_anchors, labels,
+  n_aug = n_aug, sigma = g0_sigma, seed = 1003L
+)
+
+aug_g2 <- augment_cov_geodesic_mixup(
+  example_anchors, labels,
+  n_aug = n_aug, beta_alpha = 1.0, seed = 1004L
+)
+
+# Each result has the same shape: 8 anchors x 3 augmentations = 24 synthetic
+# covariances per method.
+sapply(list(E0 = aug_e0, G0 = aug_g0, G1 = aug_g1, G2 = aug_g2),
+       function(r) length(r$cov))
+```
+
+### E0 amplitude-match diagnostic
+
+E0 is the off-manifold control: an Euclidean perturbation calibrated so
+its median anchor-distance matches G0's. The match ratio rho should be
+close to 1.0; a large deviation would signal that the matching routine
+failed to find a target sigma. The package surfaces rho as a
+diagnostic:
+
+```{r e0-rho}
+aug_e0$diagnostic
+```
+
+## Six-metric fidelity audit
+
+`audit_covariance_fidelity()` returns the six metrics used in Table 5
+of the manuscript: log-Euclidean and affine-invariant distances to the
+class-mean reference, eigenvalue correlation, trace ratio, condition-
+number ratio, and anchor-perturbation distance --- plus the dimension-
+normalised versions of the distance metrics. We run the audit per
+method and stitch the results into a single comparison table.
+
+```{r audit}
+methods <- list(E0 = aug_e0, G0 = aug_g0, G1 = aug_g1, G2 = aug_g2)
+
+audit_one <- function(aug) {
+  audit_covariance_fidelity(
+    anchors    = example_anchors,
+    synthetic  = aug$cov,
+    anchor_idx = aug$anchor
+  )
+}
+
+audits <- lapply(methods, audit_one)
+
+audit_table <- data.frame(
+  method        = names(audits),
+  LE_distance   = sapply(audits, `[[`, "log_euclidean_to_reference"),
+  AI_distance   = sapply(audits, `[[`, "affine_invariant_to_reference"),
+  trace_ratio   = sapply(audits, `[[`, "trace_ratio"),
+  cond_ratio    = sapply(audits, `[[`, "condition_number_ratio"),
+  anchor_dist   = sapply(audits, `[[`, "anchor_perturbation_distance"),
+  LE_normalized = sapply(audits, function(a) a$normalized$log_euclidean),
+  row.names     = NULL,
+  stringsAsFactors = FALSE
+)
+audit_table[, -1] <- round(audit_table[, -1], 4)
+audit_table
+```
+
+### How to read the table
+
+- **LE_distance / AI_distance.** Lower is better: synthetic stack is
+  closer in covariance geometry to the class-mean reference. The
+  expected ordering is E0 > G0 > G1 > G2.
+- **trace_ratio.** Closer to 1.0 means the synthetic mean preserves the
+  total power of the reference. Note that G0 can inflate this even when
+  it preserves SPD-manifold membership.
+- **cond_ratio.** Closer to 1.0 means the synthetic mean preserves
+  conditioning. G0 isotropic jitter can degrade conditioning relative
+  to E0 even though E0 is off-manifold.
+- **anchor_dist.** Mean Frobenius distance from each synthetic
+  covariance back to its anchor in log-Euclidean coordinates.
+- **LE_normalized.** Distance divided by sqrt(p(p+1)/2). This is the
+  metric used for cross-channel-count pooling in Table 5 of the
+  manuscript.
+
+This is the same multi-metric profile reported in the paper: distance
+metrics rank E0/G0/G1/G2 monotonically, but trace and conditioning
+metrics show that G0's isotropic jitter has its own fidelity costs.
+That is why the manuscript treats fidelity as a multi-metric audit
+rather than a single pass/fail score.
+
+## Visualisation
+
+A bar chart of the normalised LE distance makes the ranking
+unambiguous:
+
+```{r plot, fig.width = 6, fig.height = 4}
+op <- par(mar = c(4, 4.2, 3, 1))
+barplot(
+  audit_table$LE_normalized,
+  names.arg = audit_table$method,
+  col = c("#d95f02", "#7570b3", "#1b9e77", "#66c2a5"),
+  main = "Dimension-normalised LE distance to class mean",
+  ylab = "d_LE / sqrt(p(p+1)/2)",
+  border = NA
+)
+par(op)
+```
+
+## What is and is not in the audit
+
+This vignette runs the audit on a small two-class toy stack so it
+finishes in seconds. The full multi-dataset audit in the manuscript:
+
+- Pools fidelity metrics across BNCI2014_001, BNCI2014_004, Zhou2016
+  and Stieger2021 (N = 32 subjects, p ranging from 3 to 60).
+- Uses the calibration manifest written by the Python driver to fix
+  the random anchors-per-resample exactly.
+- Reports paired Wilcoxon tests of E0 vs each geometry-preserving
+  variant.
+
+To use the manifest-based replay yourself, see
+`vignette("manifest-replay")`.
+
+## Reference
+
+Shen, Y., & Degras, D. (2026). *Covariance Geometry as a Safety
+Constraint for Cross-Session BCI Augmentation: A Multi-Dataset
+Non-Inferiority and Fidelity Audit.*

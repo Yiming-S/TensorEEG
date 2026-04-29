@@ -1,0 +1,198 @@
+---
+title: "Manifest-Based Replay (Cross-Language Reproducibility)"
+author: "Yiming Shen"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Manifest-Based Replay (Cross-Language Reproducibility)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(TensorEEG)
+```
+
+## Why a manifest?
+
+The audit in Shen & Degras (2026) writes a `calibration_manifest.csv`
+for every `(dataset, subject, budget, resample, method, class)` cell.
+Each row records:
+
+- the real source-session trial ids that served as anchors,
+- the per-method seed used to draw the synthetic stack,
+- the augmentation ratio,
+- a `target_session_ids_used` flag for the leakage audit.
+
+This manifest is the audit trail that lets a third party regenerate
+the synthetic covariance stack exactly --- without rerunning the
+Python protocol driver or accessing any private intermediate state.
+The manifest is the contract; the seeds are the keys.
+
+The `read_calibration_manifest()` and `replay_from_manifest()`
+functions are the R-side analogues of
+`scripts/protocol/manifest.py` and
+`scripts/protocol/run_fidelity.py::_regenerate_synthetic`. Together
+they let an R user reproduce the per-cell synthetic stack and rerun
+the fidelity audit without leaving R.
+
+## Demo manifest shipped with the package
+
+A tiny manifest is bundled in `inst/extdata/`. It describes a single
+(`Example`, subject 1, budget 4, resample 0) cell with five method
+codes (R0/E0/G0/G1/G2) and two classes per method. Eight `Example`
+anchors are bundled separately as `data(example_anchors)`.
+
+```{r read-manifest}
+manifest_path <- system.file("extdata", "example_manifest.csv",
+                             package = "TensorEEG")
+manifest <- read_calibration_manifest(manifest_path)
+
+str(manifest, max.level = 1)
+head(manifest[, c("method_code", "class_label", "n_real_trials",
+                  "method_seed", "n_synthetic_per_anchor", "notes")])
+```
+
+`read_calibration_manifest()` parses the JSON-like `real_trial_ids`
+column into a list-column of integer vectors:
+
+```{r real-ids}
+manifest$real_trial_ids[1:2]
+```
+
+These are 0-based to follow the Python protocol convention.
+`replay_from_manifest()` converts them to 1-based R indices when it
+selects anchors from `source_cov_list`.
+
+## Replay synthetic stacks for every method
+
+```{r load-anchors}
+data(example_anchors)
+anchor_labels <- readRDS(system.file("extdata", "example_labels.rds",
+                                     package = "TensorEEG"))
+length(example_anchors)
+```
+
+We replay the cell for each method code, holding the anchors and
+labels constant:
+
+```{r replay-each}
+methods_to_replay <- c("R0", "E0", "G0", "G1", "G2")
+
+replays <- lapply(methods_to_replay, function(m) {
+  group <- manifest[manifest$method_code == m, , drop = FALSE]
+  replay_from_manifest(
+    manifest_group  = group,
+    source_cov_list = example_anchors,
+    source_labels   = anchor_labels,
+    ratio_per_anchor = 3L,
+    g0_sigma = 0.15,
+    g1_sigma = 0.15,
+    g2_beta_alpha = 1.0
+  )
+})
+names(replays) <- methods_to_replay
+
+sapply(replays, function(r) length(r$cov))
+```
+
+R0 returns an empty stack by design (real-only baseline; no synthetic
+covariances are generated). The other four methods return
+`8 anchors x 3 augmentations = 24` synthetic covariances each.
+
+## Verify byte-equivalent reproducibility
+
+A single seed-driven call to `augment_cov_geodesic_mixup()` directly
+should produce a synthetic stack identical to the manifest-driven
+replay --- because the manifest replay forwards the same seed to the
+same routine. This is the integration test we report in Section 6 of
+the manuscript.
+
+```{r byte-equiv}
+direct_g2 <- augment_cov_geodesic_mixup(
+  cov_list   = example_anchors,
+  labels     = anchor_labels,
+  n_aug      = 3L,
+  beta_alpha = 1.0,
+  seed       = 1004L  # matches example_manifest.csv method_seed for G2
+)
+
+stopifnot(length(direct_g2$cov) == length(replays$G2$cov))
+
+max_abs_diff <- max(mapply(function(A, B) max(abs(A - B)),
+                           direct_g2$cov, replays$G2$cov))
+max_abs_diff
+```
+
+The maximum absolute difference should be exactly 0 --- not merely
+floating-point close. Equivalent guarantees hold for E0, G0, and G1.
+
+## Run the fidelity audit on the replayed stacks
+
+The audit machinery is method-agnostic, so we can run it directly on
+the replayed synthetics:
+
+```{r audit-replays}
+audit_replays <- function(rep_list) {
+  if (length(rep_list$cov) == 0L) {
+    return(c(LE = NA_real_, AI = NA_real_, anchor = NA_real_))
+  }
+  res <- audit_covariance_fidelity(
+    anchors    = example_anchors,
+    synthetic  = rep_list$cov,
+    anchor_idx = rep_list$anchor
+  )
+  c(LE     = res$log_euclidean_to_reference,
+    AI     = res$affine_invariant_to_reference,
+    anchor = res$anchor_perturbation_distance)
+}
+
+audit_table <- t(sapply(replays, audit_replays))
+round(audit_table, 4)
+```
+
+The ranking matches `vignette("covariance-audit")`, but every number
+here was reproduced from a CSV file plus a seed --- the kind of audit
+trail a reviewer can verify without trusting the original run.
+
+## Using a manifest from your own protocol run
+
+If you have run the Python driver yourself, just point
+`read_calibration_manifest()` at the manifest CSV it wrote:
+
+```r
+manifest <- read_calibration_manifest(
+  "results/protocol/sanity_B100/calibration_manifest.csv"
+)
+```
+
+You will then need:
+
+- `source_cov_list`: SPD covariances for all source-session trials
+  (1-based indexing in R; the manifest's 0-based ids are translated
+  internally).
+- `source_labels`: integer labels matching `source_cov_list`.
+
+`replay_from_manifest()` validates that each cell contains exactly one
+row per class; if a cell is missing or malformed it stops with an
+explicit message rather than silently producing the wrong stack.
+
+## Note on A0 (alignment)
+
+A0 is intentionally **not** replayable from a manifest alone, because
+Riemannian alignment is transductive --- it requires the unlabeled
+target-session covariance stack at fit time, not just a seed. Use
+`augment_cov_alignment_riemannian()` directly with the target stack
+when reproducing A0 results.
+
+## Reference
+
+Shen, Y., & Degras, D. (2026). *Covariance Geometry as a Safety
+Constraint for Cross-Session BCI Augmentation: A Multi-Dataset
+Non-Inferiority and Fidelity Audit.*

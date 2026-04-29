@@ -1,18 +1,35 @@
 Package: TensorEEG
 Type: Package
-Title: Physics-Constrained Tensor EEG Simulation Engine
-Version: 0.9.1
+Title: Physics-Constrained Tensor EEG Simulation and Covariance-Aware Augmentation
+Version: 0.10.0
 Authors@R: person("Yiming", "Shen", email = "yiming.shen001@umb.edu", role = c("aut", "cre"))
-Description: Generates synthetic EEG data as 3rd-order tensors using physically constrained mixing matrices (Fibonacci grid, Graph Laplacian) and manifold dynamics (Lie algebra drift) to benchmark BCI algorithms.
+Description: Generates synthetic EEG data as 3rd-order tensors using
+    physically constrained mixing matrices (Fibonacci grid, Graph
+    Laplacian) and manifold dynamics (Lie algebra drift) to benchmark
+    BCI algorithms; also provides the covariance-aware augmentation
+    family used in the multi-dataset cross-session safety audit of
+    Shen and Degras (2026), including amplitude-matched Euclidean
+    perturbation (E0), log-Euclidean isotropic jitter (G0), empirical
+    tangent Gaussian jitter (G1), log-Euclidean geodesic mixup (G2),
+    Riemannian alignment (A0), a six-metric covariance fidelity audit,
+    and manifest-based replay of synthetic stacks for reproducibility
+    audits.
 License: MIT + file LICENSE
 Encoding: UTF-8
 RoxygenNote: 7.3.2
-Imports: 
+Depends:
+    R (>= 3.5.0)
+Imports:
     expm,
     signal,
     stats,
+    utils,
     graphics,
     grDevices
-Suggests: 
-    testthat
+Suggests:
+    testthat,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+LazyData: true
 Config/testthat/edition: 3

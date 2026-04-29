@@ -24,8 +24,19 @@
 #' @param n_trials Integer. The number of trials to simulate.
 #' @param alpha_ou Numeric. The autoregressive coefficient for the OU process (default: 0.95).
 #'   Values closer to 1 imply strong memory (slow drift); values closer to 0 imply white noise (jitter).
+#'   Used only when \code{process == "ou"} (default).
 #' @param sigma_eps Numeric. The standard deviation of the innovation noise (default: 0.05).
 #'   Controls the magnitude/speed of the drift.
+#' @param process Character. The angle dynamics. \code{"ou"} (default)
+#'   uses a mean-reverting AR(1)/Ornstein--Uhlenbeck process and is the
+#'   drift used by the SimEEG benchmark in Shen \& Degras (2026).
+#'   \code{"fbm"} uses fractional Brownian motion of Hurst index
+#'   \code{hurst} as a long-memory alternative; this option is provided
+#'   for sensitivity studies (e.g.\ Hurst sweeps in supplementary
+#'   analyses) and is not used by the reported SimEEG runs.
+#' @param hurst Numeric in \code{(0, 1)}. Hurst index for the fBm path
+#'   (default 0.85). Values \code{> 0.5} produce long-memory drift;
+#'   ignored when \code{process == "ou"}.
 #'
 #' @return A list of length \code{n_trials}, where each element is an
 #'   \code{n_sources x n_sources} numeric rotation matrix.
@@ -33,48 +44,83 @@
 #' @importFrom expm expm
 #' @importFrom stats rnorm
 #' @export
-generate_drift_rotations <- function(n_sources, n_trials, 
-                                     alpha_ou = 0.95, sigma_eps = 0.05) {
-  if(!.is_whole_number(n_sources) || n_sources < 1) {
+generate_drift_rotations <- function(n_sources, n_trials,
+                                     alpha_ou = 0.95, sigma_eps = 0.05,
+                                     process = c("ou", "fbm"),
+                                     hurst = 0.85) {
+  process <- match.arg(process)
+  if (!.is_whole_number(n_sources) || n_sources < 1) {
     stop("n_sources must be a positive integer.")
   }
-  if(!.is_whole_number(n_trials) || n_trials < 1) {
+  if (!.is_whole_number(n_trials) || n_trials < 1) {
     stop("n_trials must be a positive integer.")
   }
-  if(!is.numeric(alpha_ou) || length(alpha_ou) != 1L || !is.finite(alpha_ou) || abs(alpha_ou) >= 1) {
+  if (!is.numeric(alpha_ou) || length(alpha_ou) != 1L ||
+      !is.finite(alpha_ou) || abs(alpha_ou) >= 1) {
     stop("alpha_ou must be a single finite number in (-1, 1).")
   }
-  if(!is.numeric(sigma_eps) || length(sigma_eps) != 1L || !is.finite(sigma_eps) || sigma_eps < 0) {
+  if (!is.numeric(sigma_eps) || length(sigma_eps) != 1L ||
+      !is.finite(sigma_eps) || sigma_eps < 0) {
     stop("sigma_eps must be a single non-negative finite number.")
   }
-  
+  if (!is.numeric(hurst) || length(hurst) != 1L || !is.finite(hurst) ||
+      hurst <= 0 || hurst >= 1) {
+    stop("hurst must be a single number in (0, 1).")
+  }
+
   n_sources <- as.integer(round(n_sources))
   n_trials <- as.integer(round(n_trials))
-  
-  if(n_sources == 1L) {
+
+  if (n_sources == 1L) {
     return(rep(list(matrix(1, 1, 1)), n_trials))
   }
-  
+
   G <- matrix(stats::rnorm(n_sources^2), n_sources, n_sources)
   Omega_base <- (G - t(G)) / 2
   frob_norm <- sqrt(sum(Omega_base^2))
-  if(frob_norm <= .Machine$double.eps) {
+  if (frob_norm <= .Machine$double.eps) {
     return(rep(list(diag(n_sources)), n_trials))
   }
   Omega_base <- Omega_base / frob_norm
-  
-  theta <- numeric(n_trials)
-  theta[1] <- 0
-  noise <- stats::rnorm(n_trials, 0, sigma_eps)
-  
-  for(k in 2:n_trials) {
-    theta[k] <- alpha_ou * theta[k-1] + noise[k]
+
+  theta <- if (process == "ou") {
+    .angle_path_ou(n_trials, alpha_ou = alpha_ou, sigma_eps = sigma_eps)
+  } else {
+    .angle_path_fbm(n_trials, hurst = hurst, sigma_eps = sigma_eps)
   }
-  
+
   R_list <- vector("list", n_trials)
-  for(k in seq_len(n_trials)) {
+  for (k in seq_len(n_trials)) {
     R_list[[k]] <- expm::expm(theta[k] * Omega_base)
   }
-  
+
   return(R_list)
+}
+
+
+# Internal: AR(1)/OU angle path matching the original SimEEG behaviour.
+.angle_path_ou <- function(n_trials, alpha_ou, sigma_eps) {
+  theta <- numeric(n_trials)
+  theta[1L] <- 0
+  noise <- stats::rnorm(n_trials, 0, sigma_eps)
+  if (n_trials >= 2L) {
+    for (k in 2:n_trials) {
+      theta[k] <- alpha_ou * theta[k - 1L] + noise[k]
+    }
+  }
+  theta
+}
+
+
+# Internal: discrete fractional Brownian motion via Mandelbrot--van Ness
+# convolution kernel. Used only when process == "fbm".
+.angle_path_fbm <- function(n_trials, hurst, sigma_eps,
+                            kernel_size = 64L) {
+  if (n_trials == 1L) return(0)
+  j <- 0:(kernel_size - 1L)
+  kernel <- (j + 1)^(hurst - 0.5) - j^(hurst - 0.5)
+  white <- stats::rnorm(n_trials + kernel_size, 0, sigma_eps)
+  fgn <- as.numeric(stats::filter(white, kernel, sides = 1L))
+  fgn <- fgn[(kernel_size + 1L):(kernel_size + n_trials)]
+  cumsum(fgn)
 }
