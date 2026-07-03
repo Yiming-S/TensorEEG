@@ -3,7 +3,7 @@
 **Physics-Constrained EEG Simulation and Covariance-Aware Augmentation**
 
 <p align="center">
-  <img src="man/figures/cover.png"
+  <img src="man/figures/cover.svg"
        alt="TensorEEG cover: Simulate, SPD covariance, augmentation footprint, fidelity audit"
        width="100%">
 </p>
@@ -204,8 +204,8 @@ browseVignettes("TensorEEG")
 devtools::test()
 ```
 
-The test suite is currently 367 tests across 8 files, including 48
-end-to-end integration tests that exercise the full
+The test suite is currently 45 test blocks (120 assertions) across 8 files,
+including end-to-end integration tests that exercise the full
 `sim_eeg_master() -> tensor_to_cov() -> augment_cov_*() ->
 audit_covariance_fidelity()` pipeline and verify byte-equivalent
 manifest replay.

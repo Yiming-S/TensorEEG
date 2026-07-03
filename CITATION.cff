@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+type: software
+title: "TensorEEG"
+abstract: "Physics-constrained synthetic EEG tensor simulation and covariance-aware SPD augmentation with a six-metric fidelity audit and manifest replay."
+authors:
+  - family-names: "Shen"
+    given-names: "Yiming"
+    email: "yiming.shen001@umb.edu"
+    orcid: "https://orcid.org/0009-0004-6282-3755"
+version: "0.10.0"
+repository-code: "https://github.com/Yiming-S/TensorEEG"
+url: "https://github.com/Yiming-S/TensorEEG"
+license: MIT
+keywords:
+  - EEG
+  - data augmentation
+  - SPD manifold
+  - covariance
+  - simulation
+  - R
